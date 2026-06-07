@@ -54,6 +54,36 @@ modules:
     - npm install
     - npm run build:cf
     supported-platforms: []
+- name: ui5-version-test-destination-content
+  type: com.sap.application.content
+  requires:
+  - name: ui5-version-test-destination-service
+    parameters:
+      content-target: true
+  - name: ui5-version-test-repo-host
+    parameters:
+      service-key:
+        name: ui5-version-test-repo-host-key
+  - name: uaa_ui5-version-test
+    parameters:
+      service-key:
+        name: uaa_ui5-version-test-key
+  parameters:
+    content:
+      instance:
+        destinations:
+        - Name: ui5_version_test_ui5_version_test_repo_host
+          ServiceInstanceName: ui5-version-test-html5-service
+          ServiceKeyName: ui5-version-test-repo-host-key
+          sap.cloud.service: ui5.version.test
+        - Authentication: OAuth2UserTokenExchange
+          Name: ui5_version_test_uaa_ui5_version_test
+          ServiceInstanceName: ui5-version-test-xsuaa-service
+          ServiceKeyName: uaa_ui5-version-test-key
+          sap.cloud.service: ui5.version.test
+        existing_destinations_policy: ignore
+  build-parameters:
+    no-source: true
 resources:
 - name: ui5-version-test-repo-host
   type: org.cloudfoundry.managed-service
@@ -65,20 +95,18 @@ resources:
   type: org.cloudfoundry.managed-service
   parameters:
     config:
-      HTML5Runtime_enabled: false
-      init_data:
-        instance:
-          destinations:
-          - Authentication: NoAuthentication
-            Name: ui5
-            ProxyType: Internet
-            Type: HTTP
-            URL: https://ui5.sap.com
-          existing_destinations_policy: update
+      HTML5Runtime_enabled: true
       version: 1.0.0
     service: destination
     service-name: ui5-version-test-destination-service
     service-plan: lite
+- name: uaa_ui5-version-test
+  type: org.cloudfoundry.managed-service
+  parameters:
+    path: ./xs-security.json
+    service: xsuaa
+    service-name: ui5-version-test-xsuaa-service
+    service-plan: application
 parameters:
   deploy_mode: html5-repo
   enable-parallel-deployments: true
