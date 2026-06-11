@@ -1,6 +1,21 @@
 ## UI5バージョンの確認
-### テスト設定
-noversion
+## 目的
+SAP Build Work Zoneで実行するUI5アプリのバージョンを固定する方法について検証する
+
+## 方法
+1. manifest.jsonの`sap.platform.cf.ui5VersionNumber`で固定
+2. SAP Build Work Zoneを開く時、URLパラメータに`&sap-ui-version=<version>&sap-iframe-params=sap-ui-version`を指定
+
+## サマリ
+- 1,2の方法いずれでも、指定したUI5バージョンでアプリが実行されることを確認した
+- 1の方法では、アプリごとに異なるUI5バージョンを指定できた
+- 1,2を併用するとエラーになった（URLパラメータとアプリが同じバージョンでもエラー）
+
+## 注意事項
+- サイトが"Spaces and Pages - New Experience"の場合、Space and Pages URLパラメータの指定では、1.146未満のバージョンを指定した場合、サイトそのものがロードできなかった（Groupレイアウトでは表示可能）
+
+## アプリの設定
+- noversion
 ```
   "sap.ui5": {
     ...
@@ -10,7 +25,7 @@ noversion
     },
 ```
 
-version136
+- version136
 ```
   "sap.ui5": {
     ...
@@ -23,7 +38,7 @@ version136
   }    
 ```
 
-version145
+- version145
 ```
   "sap.ui5": {
     ...
@@ -36,6 +51,7 @@ version145
   }  
 ```
 
+## 検証結果
 ### ローカル実行時
 - デフォルトのUI5バージョンは、manifest.jsonの`minUI5Version`で指定したバージョン
 
@@ -45,6 +61,10 @@ version145
 
 ### HTML5 Applicationsで実行時 (index.html)
 
+- noversion: 1.149.0 *UI5バージョンが上がったため
+- version136: 1.149.0
+- version145: 1.149.0
+
 ### BWZ実行時
 - Shellのバージョン：1.148.1
 - noversion: 1.148.1
@@ -52,7 +72,7 @@ version145
 - version145: 1.145.3
 
 ### BWZのパラメータでバージョン指定
-`s&ap-ui-version=1.147&sap-iframe-params=sap-ui-version`を指定
+`&sap-ui-version=1.147&sap-iframe-params=sap-ui-version`を指定
 `https://3d7fa4ddtrial.launchpad.cfapps.us10.hana.ondemand.com/site?siteId=57d3a691-61c5-4675-9459-3fb6ef65eab6&sap-ui-version=1.147&sap-iframe-params=sap-ui-version#Shell-home`
 
 - Shellのバージョン：1.147.2
@@ -66,61 +86,4 @@ ui5appruntimeというリソースに着目
 
 ![Internal Server Error](docs/images/internal%20server%20error.png)
 
-## 原因の調査
-
-### `ui5appruntime` とは
-
-`ui5appruntime.html` は、SAP Build Work Zone (BWZ) / Cloud Portal の SaaS approuter（`cp.portal`）が**サーバ側で生成する、単一アプリ実行専用のランタイムページ**。
-
-BWZ では各アプリは Shell の中に **iframe** として埋め込まれて起動し、その iframe の中身がこの `ui5appruntime.html` である。主な役割は次のとおり。
-
-- **軽量版 ushell（AppRuntime）の起動** — レスポンスHTMLの `data-sap-ui-oninit="module:sap/ushell/appRuntime/ui5/AppRuntime"` が示すとおり、フルのFLPではなく「1アプリだけを動かすための最小限のushell」をブートする。読み込んでいる `sap/fiori/appruntime-min-0.js`〜`-3.js` がその実体。
-- **UI5ブートストラップのバージョン解決** — リクエストの `sap-ui-version` を受け取り、サーバ側で具体的なパッチバージョンへ解決してブートストラップの `src` を組み立てる。正常レスポンスでは `sap-ui-version=1.147` → `https://sapui5.hana.ondemand.com/1.147.2/resources/...` と `1.147` が `1.147.2` に解決されている。
-- **Shell↔アプリ間の連携設定の注入** — Personalization、Container、`appIndex`（`sap.cf.modules.tcprovider`）など、iframe内アプリが親Shellと通信するための設定をHTMLに埋め込む。
-
-つまり「**指定UI5バージョンでアプリを1つだけ起動するための、サーバ生成のiframeホストページ**」。どのバージョンを使うかが決まらないと、このページ自体を生成できない。
-
-### エラーになる理由：`sap-ui-version` の二重指定
-
-正常時とエラー時のリクエストURLの決定的な違いは **`sap-ui-version` の個数**。
-
-正常時（noversion）— `sap-ui-version` は1つだけ：
-```
-...&sap-ui-app-id=noversion&...&sap-ui-version=1.147
-```
-
-エラー時（version136）— `sap-ui-version` が**2つ**、しかも値が衝突：
-```
-...&sap-ui-version=1.136.x&sap-ui-version=1.147&sap-ui-app-id=version136&...
-                 ^^^^^^^^                ^^^^^
-              manifest由来            BWZ URL由来
-```
-
-| 指定元 | 値 | 出どころ |
-|---|---|---|
-| アプリのmanifest | `1.136.x` | `version136/webapp/manifest.json` の `sap.platform.cf.ui5VersionNumber` |
-| BWZのURLパラメータ | `1.147` | サイトURLの `sap-ui-version=1.147&sap-iframe-params=sap-ui-version` |
-
-`noversion` のmanifestには `sap.platform.cf` ブロックが無く、`version136`/`version145` にだけ `ui5VersionNumber` がある — これが分かれ目。
-
-発生しているのは以下の流れ。
-
-1. アプリに `sap.platform.cf.ui5VersionNumber: "1.136.x"` があると、approuterは `ui5appruntime.html` のURLに**アプリ宣言バージョン `sap-ui-version=1.136.x` を付与**する。
-2. BWZ側では `sap-iframe-params=sap-ui-version` の指定により、Shell URLの `sap-ui-version=1.147` も **iframeへ引き継がれて付与**される。
-3. 結果、同名パラメータが2つ並び、サーバ側のバージョン解決ロジックが矛盾した入力（`1.136.x` と `1.147`）を受け取る。加えて `1.136.x` は具体パッチではなくワイルドカード表記であり、`1.147` のような確定値と整合できない。
-4. `ui5appruntime.html` はバージョンが解決できないとブートストラップURLを生成できないため、**HTML生成の段階で例外となり 500 Internal Server Error** になる。
-
-`noversion` が動くのは、バージョン指定元が「BWZの `1.147` 1つだけ」で衝突がなく、サーバが素直に `1.147.2` へ解決できるため。
-
-### 結論・回避策
-
-**バージョン指定を「URLパラメータ」と「manifest（`sap.platform.cf.ui5VersionNumber`）」の二重で行うと、`ui5appruntime` 生成時にバージョンが衝突して500になる。** どちらか一方に統一する。
-
-- **サイト全体で固定したい** → URLパラメータ（`sap-ui-version`）またはサイト設定側で指定し、manifestの `sap.platform.cf.ui5VersionNumber` は外す。
-- **アプリ単位で固定したい** → manifestの `ui5VersionNumber` に `1.136.x` のようなワイルドカードではなく**具体パッチ（例 `1.136.19`）** を入れ、BWZ URL側の `sap-ui-version` は付けない。
-
-直接の引き金はサイトURLの `sap-iframe-params=sap-ui-version`。これがmanifest由来のバージョンと衝突させているため、アプリ側でバージョンを固定する運用なら、このURLパラメータ指定は併用しない。
-
-参考：
-- [SAP KBA 3353289 - Work Zone "Internal Server Error" when navigating to HTML5 applications](https://userapps.support.sap.com/sap/support/knowledge/en/3353289)
-- [SAP KBA 2916153 - Errors when opening apps on Launchpad, Work Zone or Cloud Portal service](https://userapps.support.sap.com/sap/support/knowledge/en/2916153)
+原因と回避策の詳細は [docs/原因の調査.md](docs/原因の調査.md) を参照。
