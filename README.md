@@ -31,7 +31,7 @@ Three apps differ only in how they declare their UI5 version:
 
 Only `version136` / `version145` have a `sap.platform.cf` block — this is the dividing line that triggers the conflict described in the Root Cause Analysis.
 
-> The table and the main results below reflect the baseline config (`1.136.x`). For the dual-specification test ([Combining manifest pin + URL parameter](#combining-manifest-pin--url-parameter)), version136's `ui5VersionNumber` was later changed to the concrete patch `1.136.18` — the current value in the repo.
+> For the dual-specification test ([Combining manifest pin + URL parameter](#combining-manifest-pin--url-parameter)), version136's `ui5VersionNumber` was temporarily changed to the concrete patch `1.136.18`, then reverted to `1.136.x`.
 
 <details>
 <summary>manifest.json snippets</summary>
