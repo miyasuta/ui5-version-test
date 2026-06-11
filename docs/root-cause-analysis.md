@@ -39,19 +39,32 @@ The flow that occurs is:
 
 1. When an app has `sap.platform.cf.ui5VersionNumber: "1.136.x"`, the approuter **appends the app-declared version `sap-ui-version=1.136.x`** to the `ui5appruntime.html` URL.
 2. On the BWZ side, because of `sap-iframe-params=sap-ui-version`, the Shell URL's `sap-ui-version=1.147` is **also propagated and appended to the iframe**.
-3. As a result, two parameters with the same name appear, and the server-side version resolution logic receives contradictory input (`1.136.x` and `1.147`). On top of that, `1.136.x` is a wildcard notation rather than a concrete patch, so it cannot be reconciled with a fixed value like `1.147`.
+3. As a result, two parameters with the same name appear, and the server-side version resolution logic must collapse them into a single version. It can do this **only when both values are the byte-identical concrete patch**. Here they differ (`1.136.x` vs `1.147`), so resolution fails.
 4. Since `ui5appruntime.html` cannot generate the bootstrap URL when the version cannot be resolved, **an exception is thrown during HTML generation, resulting in a 500 Internal Server Error**.
 
-`noversion` works because there is only one version source (BWZ's `1.147`), so there is no conflict and the server resolves it cleanly to `1.147.2`.
+`noversion` works because there is only one version source (BWZ's `1.147`), so there is nothing to reconcile and the server resolves it cleanly to `1.147.2`.
+
+### Verified: it is the value reconciliation, not the mere duplication
+
+The duplicate parameter alone is **not** the cause — what matters is whether the two values reconcile to one version:
+
+| Manifest `ui5VersionNumber` | URL `sap-ui-version` | Result |
+|---|---|---|
+| `1.136.x` (wildcard) | `1.147` | ❌ 500 |
+| `1.145.x` (wildcard) | `1.145` | ❌ 500 |
+| `1.136.18` (concrete) | `1.136.18` | ✅ opens on 1.136.18 |
+
+Two identical concrete patches (`1.136.18` + `1.136.18`) succeed. Note that `1.145.x` vs `1.145` still fails even though both resolve to the same patch (1.145.3) — the literal strings differ, so the server never reconciles them. In other words, the failure is the **two non-identical `sap-ui-version` values**, not the duplication itself.
 
 ## Conclusion / Workaround
 
-**Specifying the version in two places — the "URL parameter" and the "manifest (`sap.platform.cf.ui5VersionNumber`)" — causes a version conflict when `ui5appruntime` is generated, resulting in a 500.** Use only one of them.
+**Specifying the version in two places — the "URL parameter" and the "manifest (`sap.platform.cf.ui5VersionNumber`)" — sends two `sap-ui-version` values to `ui5appruntime`. Unless those two values are the identical concrete patch, they cannot be reconciled and you get a 500.** Use only one of them.
 
 - **To pin for the whole site** → specify it via the URL parameter (`sap-ui-version`) or in the site settings, and remove `sap.platform.cf.ui5VersionNumber` from the manifest.
-- **To pin per app** → put a **concrete patch (e.g. `1.136.19`)** in the manifest's `ui5VersionNumber` instead of a wildcard like `1.136.x`, and do not add `sap-ui-version` on the BWZ URL side.
+- **To pin per app** → set `ui5VersionNumber` in the manifest (a wildcard like `1.136.x` or a concrete patch both work when used alone), and do not add `sap-ui-version` on the BWZ URL side.
+- **Combining is technically possible but discouraged** → it only succeeds when the manifest and the URL carry the byte-identical concrete patch (e.g. both `1.136.18`). That means maintaining the same patch in two places; any drift, or a wildcard, gives a 500.
 
-The direct trigger is `sap-iframe-params=sap-ui-version` in the site URL. Because it makes the manifest-derived version conflict, do not combine this URL parameter when you operate by pinning the version on the app side.
+The direct trigger is `sap-iframe-params=sap-ui-version` in the site URL. Because it propagates the shell version into the iframe alongside the manifest-declared version, do not combine this URL parameter when you operate by pinning the version on the app side.
 
 References:
 - [SAP KBA 3353289 - Work Zone "Internal Server Error" when navigating to HTML5 applications](https://userapps.support.sap.com/sap/support/knowledge/en/3353289)
