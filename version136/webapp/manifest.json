@@ -109,7 +109,7 @@
     }
   },
   "sap.platform.cf": {
-        "ui5VersionNumber": "1.136.x"
+        "ui5VersionNumber": "1.136.18"
   },
   "sap.cloud": {
     "public": true,
